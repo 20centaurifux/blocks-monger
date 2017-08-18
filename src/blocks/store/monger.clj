@@ -86,6 +86,11 @@
     [this]
     (mg/drop-db (:conn this) (.getName (:db this)))))
 
+(defn disconnect!
+  "Disconnect from MongoDB."
+  [store]
+  (mg/disconnect (:conn store)))
+
 (store/privatize-constructors! MongerStore)
 
 (defn monger-store
