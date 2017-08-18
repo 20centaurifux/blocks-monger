@@ -76,7 +76,9 @@
   (-delete!
     [this id]
     (when-let [hex (mhash/hex id)]
-      (mc/remove (:db this) "objects") {:id hex})))
+      (-> (mc/remove (:db this) "objects" {:id hex})
+          (.getN)
+          (not= 0)))))
 
 (store/privatize-constructors! MongerStore)
 
