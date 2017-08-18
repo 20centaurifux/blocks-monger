@@ -78,7 +78,13 @@
     (when-let [hex (mhash/hex id)]
       (-> (mc/remove (:db this) "objects" {:id hex})
           (.getN)
-          (not= 0)))))
+          (not= 0))))
+
+  store/ErasableStore
+
+  (-erase!
+    [this]
+    (mg/drop-db (:conn this) (.getName (:db this)))))
 
 (store/privatize-constructors! MongerStore)
 
