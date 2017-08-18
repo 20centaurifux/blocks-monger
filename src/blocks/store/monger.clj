@@ -1,5 +1,5 @@
 (ns blocks.store.monger
-  "MongoDB storage backed for blocks."
+  "MongoDB storage backend for blocks."
   (:require [blocks.core :as block]
             [blocks.data :as data]
             [blocks.store :as store]
