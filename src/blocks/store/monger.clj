@@ -51,29 +51,29 @@
 
   (-stat
     [this id]
-    (when-let [doc (mc/find-one-as-map (:db this) "objects" {:id (mhash/hex id)})]
+    (when-let [doc (mc/find-one-as-map (:db this) "blocks" {:id (mhash/hex id)})]
       (:stats doc)))
 
   (-list
     [this opts]
-    (-> (execute-query (:db this) "objects" (merge (opts->query opts) (opts->limit opts)))
+    (-> (execute-query (:db this) "blocks" (merge (opts->query opts) (opts->limit opts)))
         (cur->seq)))
 
   (-get
     [this id]
-    (when-let [doc (mc/find-one-as-map (:db this) "objects" {:id (mhash/hex id)})]
+    (when-let [doc (mc/find-one-as-map (:db this) "blocks" {:id (mhash/hex id)})]
       (doc->block doc)))
 
   (-put!
     [this block]
     (let [id (:id block)
           hex (mhash/hex id)]
-      (if-let [doc (mc/find-one-as-map (:db this) "objects" {:id hex})]
+      (if-let [doc (mc/find-one-as-map (:db this) "blocks" {:id hex})]
         (doc->block doc)
         (let [stats {:stored-at (java.util.Date.)
                      :size (:size block)}]
           (mc/insert (:db this)
-                     "objects"
+                     "blocks"
                      {:id hex
                       :blob (block->hex block)
                       :stats stats
@@ -83,7 +83,7 @@
   (-delete!
     [this id]
     (when-let [hex (mhash/hex id)]
-      (-> (mc/remove (:db this) "objects" {:id hex})
+      (-> (mc/remove (:db this) "blocks" {:id hex})
           (.getN)
           (not= 0))))
 
@@ -100,7 +100,7 @@
 
 (store/privatize-constructors! MongerStore)
 
-(defn monger-store
+(defn monger-block-store
   "Creates a new Monger block store.
 
   Supported options:
@@ -119,7 +119,7 @@
 (defmethod store/initialize "monger"
   [location]
   (let [uri (store/parse-uri location)]
-    (monger-store
+    (monger-block-store
      :host (:host uri)
      :port (:or (:port uri) 27017)
      :db-name (subs (:path uri) 1)
