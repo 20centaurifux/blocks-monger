@@ -7,11 +7,12 @@
             [monger.core :as mg]
             [monger.collection :as mc]
             [monger.operators :refer :all]
-            [monger.query :as query]))
+            [monger.query :as query]
+            [alphabase.hex :as hex]))
 
 (defn- doc->block
   [doc]
-  (-> (data/literal-block (mhash/decode (:id doc)) (:blob doc))
+  (-> (data/literal-block (mhash/decode (:id doc)) (hex/decode (:blob doc)))
       (block/with-stats (:stats doc))))
 
 (defn- opts->query
@@ -36,6 +37,12 @@
   (lazy-seq
     (when-let [s (seq cur)]
       (cons (doc->block (first cur)) (cur->seq (rest cur))))))
+
+(defn block->hex
+  [block]
+  (let [dst (java.io.ByteArrayOutputStream.)]
+    (clojure.java.io/copy (block/open block) dst)
+    (hex/encode (.toByteArray dst)))) 
 
 (defrecord MongerStore
   [uri]
@@ -68,7 +75,7 @@
           (mc/insert (:db this)
                      "objects"
                      {:id hex
-                      :blob (slurp (block/open block))
+                      :blob (block->hex block)
                       :stats stats
                       :algorithm (:algorithm id)})
           (block/with-stats block stats)))))
