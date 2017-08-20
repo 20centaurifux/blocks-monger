@@ -1,6 +1,8 @@
 (ns blocks.store.monger-test
-  (:require [clojure.test :refer :all]))
+  (:require
+    [blocks.store.tests :as tests]
+    [blocks.store.monger :refer [monger-block-store]]
+    [clojure.test :refer :all]))
 
-(deftest a-test
-  (testing "FIXME, I fail."
-    (is (= 0 1))))
+(deftest ^:integration test-monger-store
+   (tests/check-store! #(monger-block-store :host "localhost" :db-name "monger-store-test")))
