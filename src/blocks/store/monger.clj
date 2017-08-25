@@ -12,31 +12,33 @@
 
 (defn- doc->block
   [doc]
-  (-> (data/literal-block (mhash/decode (:id doc)) (hex/decode (:blob doc)))
-      (block/with-stats (:stats doc))))
+  (when doc
+    (let [id (mhash/decode (:id doc))]
+      (-> (data/literal-block id (hex/decode (:blob doc)))
+          (block/with-stats (merge {:id id} (:stats doc)))))))
 
 (defn- opts->query
   [opts]
-  (->> (cond-> {}
-         (:algorithm opts) (assoc :algorithm (:algorithm opts))
-         (:after opts)     (assoc :id {$regex (str "^" (:after opts))}))
+  (->> (cond-> (select-keys opts [:algorithm])
+         (:after opts) (assoc :id {$gt (:after opts)}))
        (hash-map :query)))
 
 (defn- opts->limit
   [opts]
-  (cond-> {}
-    (:limit opts) (assoc :limit (:limit opts))))
+  (select-keys opts [:limit]))
+
+(defn- opts->find-arg
+  [opts]
+  (merge
+    (query/empty-query)
+    (opts->query opts)
+    (opts->limit opts)
+    (hash-map :sort {:id 1})))
 
 (defn- execute-query
   [db collname m]
   (let [coll (.getCollection db collname)]
-    (query/exec (merge {:collection coll} (query/empty-query) m))))
-
-(defn cur->seq
-  [cur]
-  (lazy-seq
-    (when-let [s (seq cur)]
-      (cons (doc->block (first cur)) (cur->seq (rest cur))))))
+    (query/exec (merge {:collection coll} m))))
 
 (defn block->hex
   [block]
@@ -44,46 +46,67 @@
     (clojure.java.io/copy (block/open block) dst)
     (hex/encode (.toByteArray dst)))) 
 
-(defrecord MongerStore
-  [uri]
+(defn connect
+  [store]
+  (let [conn (mg/connect store)
+        db (mg/get-db conn (:db-name store))]
+    [conn db]))
+
+(defmacro with-db
+  [store & body]
+  `(let [conn# (mg/connect ~store)
+         result# (-> (mg/get-db conn# (:db-name ~store))
+                     ~@body)]
+     (mg/disconnect conn#)
+     result#))
+
+(defrecord MongerBlockStore
+  []
 
   store/BlockStore
 
   (-stat
     [this id]
-    (when-let [doc (mc/find-one-as-map (:db this) "blocks" {:id (mhash/hex id)})]
-      (:stats doc)))
+    (when-let [doc (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)}))]
+      (-> (doc->block doc)
+          (block/meta-stats))))
 
   (-list
     [this opts]
-    (-> (execute-query (:db this) "blocks" (merge (opts->query opts) (opts->limit opts)))
-        (cur->seq)))
+    (let [[conn db] (connect this)
+          stats (->> (execute-query db "blocks" (opts->find-arg opts))
+                     (map (comp block/meta-stats doc->block))
+                     (doall))]
+      (mg/disconnect conn)
+      stats))
 
   (-get
     [this id]
-    (when-let [doc (mc/find-one-as-map (:db this) "blocks" {:id (mhash/hex id)})]
+    (when-let [doc (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)}))]
       (doc->block doc)))
 
   (-put!
     [this block]
     (let [id (:id block)
           hex (mhash/hex id)]
-      (if-let [doc (mc/find-one-as-map (:db this) "blocks" {:id hex})]
-        (doc->block doc)
-        (let [stats {:stored-at (java.util.Date.)
-                     :size (:size block)}]
-          (mc/insert (:db this)
-                     "blocks"
-                     {:id hex
-                      :blob (block->hex block)
-                      :stats stats
-                      :algorithm (:algorithm id)})
-          (block/with-stats block stats)))))
+      (with-db
+        this
+        (#(if-let [doc (mc/find-one-as-map % "blocks" {:id hex})]
+           (doc->block doc)
+           (let [stats {:stored-at (java.util.Date.)
+                        :size (:size block)}]
+             (mc/insert %
+                        "blocks"
+                        {:id hex
+                         :blob (block->hex block)
+                         :stats stats
+                         :algorithm (:algorithm id)})
+             (block/with-stats block stats)))))))
 
   (-delete!
     [this id]
     (when-let [hex (mhash/hex id)]
-      (-> (mc/remove (:db this) "blocks" {:id hex})
+      (-> (with-db this (mc/remove "blocks" {:id hex}))
           (.getN)
           (not= 0))))
 
@@ -91,14 +114,9 @@
 
   (-erase!
     [this]
-    (mg/drop-db (:conn this) (.getName (:db this)))))
+    (with-db this (mc/remove "blocks" {}))))
 
-(defn disconnect!
-  "Disconnect from MongoDB."
-  [store]
-  (mg/disconnect (:conn store)))
-
-(store/privatize-constructors! MongerStore)
+(store/privatize-constructors! MongerBlockStore)
 
 (defn monger-block-store
   "Creates a new Monger block store.
@@ -110,11 +128,7 @@
   - `db-name`
   - `credentials`"
   [& {:as opts}]
-  (map->MongerStore
-    (let [conn (mg/connect opts)]
-      (merge {:conn conn
-              :db (mg/get-db conn (:db-name opts))}
-             (dissoc opts :credentials)))))
+  (map->MongerBlockStore opts))
 
 (defmethod store/initialize "monger"
   [location]
