@@ -61,11 +61,16 @@
      (mg/disconnect conn#)
      result#))
 
+(defn- doc->stats
+  [doc]
+  (when doc
+    (assoc (:stats doc) :id (mhash/decode (:id doc)))))
+
 (defn- cur->seq
   [cur conn]
   (lazy-seq
     (if-let [doc (first cur)]
-      (cons (assoc (:stats doc) :id (mhash/decode (:id doc)))
+      (cons (doc->stats doc)
             (cur->seq (rest cur) conn))
       (mg/disconnect conn))))
 
@@ -76,9 +81,8 @@
 
   (-stat
     [this id]
-    (when-let [doc (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)}))]
-      (-> (doc->block doc)
-          (block/meta-stats))))
+    (-> (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)} [:id :stats]))
+        (doc->stats)))
 
   (-list
     [this opts]
@@ -88,8 +92,8 @@
 
   (-get
     [this id]
-    (when-let [doc (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)}))]
-      (doc->block doc)))
+    (-> (with-db this (mc/find-one-as-map "blocks" {:id (mhash/hex id)}))
+        (doc->block)))
 
   (-put!
     [this block]
