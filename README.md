@@ -8,7 +8,7 @@ The `blocks.store.monger` namespace provides the `monger-block-store` constructo
 at least the `host` and `db-name` option to connect to your MongoDB server.
 
 Blocks are stored in a collection named `blocks`. Each document contains the hex-encoded
-id of the stored block, meta data, algorithm and data (also hex-encoded).
+id of the stored block, meta data, algorithm and data (base64 encoded).
 
 	=> (require '[blocks.core :as blocks]
 	            '[blocks.store.monger])

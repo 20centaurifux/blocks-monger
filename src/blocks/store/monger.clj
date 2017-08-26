@@ -1,20 +1,31 @@
 (ns blocks.store.monger
   "MongoDB storage backend for blocks."
-  (:require [blocks.core :as block]
-            [blocks.data :as data]
-            [blocks.store :as store]
-            [multihash.core :as mhash]
-            [monger.core :as mg]
-            [monger.collection :as mc]
-            [monger.operators :refer :all]
-            [monger.query :as query]
-            [alphabase.hex :as hex]))
+  (:require (blocks
+              [core :as block]
+              [data :as data]
+              [store :as store])
+            (monger
+              [core :as mg]
+              [collection :as mc]
+              [query :as query]
+              [operators :refer :all])
+            [multihash.core :as mhash]))
+
+(defn- block->base64
+  [block]
+  (let [dst (java.io.ByteArrayOutputStream.)]
+    (clojure.java.io/copy (block/open block) dst)
+    (.encodeToString (java.util.Base64/getEncoder) (.toByteArray dst))))
+
+(defn- base64->bytes
+  [to-decode]
+  (.decode (java.util.Base64/getDecoder) (.getBytes to-decode)))
 
 (defn- doc->block
   [doc]
   (when doc
     (let [id (mhash/decode (:id doc))]
-      (-> (data/literal-block id (hex/decode (:blob doc)))
+      (-> (data/literal-block id (base64->bytes (:blob doc)))
           (block/with-stats (merge {:id id} (:stats doc)))))))
 
 (defn- opts->query
@@ -41,13 +52,7 @@
   (let [coll (.getCollection db collname)]
     (query/exec (merge {:collection coll} m))))
 
-(defn block->hex
-  [block]
-  (let [dst (java.io.ByteArrayOutputStream.)]
-    (clojure.java.io/copy (block/open block) dst)
-    (hex/encode (.toByteArray dst)))) 
-
-(defn connect
+(defn- connect
   [store]
   (let [conn (mg/connect store)
         db (mg/get-db conn (:db-name store))]
@@ -108,7 +113,7 @@
              (mc/insert %
                         "blocks"
                         {:id hex
-                         :blob (block->hex block)
+                         :blob (block->base64 block)
                          :stats stats
                          :algorithm (:algorithm id)})
              (block/with-stats block stats)))))))
