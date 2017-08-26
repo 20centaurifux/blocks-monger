@@ -26,6 +26,3 @@ id of the stored block, meta data, algorithm and data (also hex-encoded).
 
 	; deleting all documents:
 	(blocks/erase!! store)
-
-	; disconnecting from MongoDB:
-	=> (blocks.store.monger/disconnect! store)
