@@ -8,7 +8,8 @@
               [core :as mg]
               [collection :as mc]
               [query :as query]
-              [operators :refer :all])
+              [operators :refer :all]
+              [credentials :as mcred])
             [multihash.core :as mhash]))
 
 (defn- block->base64
@@ -54,15 +55,16 @@
 
 (defn- connect
   [store]
-  (let [conn (mg/connect store)
+  (let [conn (if-let [cred (:credentials store)]
+               (mg/connect-with-credentials (:host store) (:port store) cred)
+               (mg/connect store))
         db (mg/get-db conn (:db-name store))]
     [conn db]))
 
 (defmacro with-db
   [store & body]
-  `(let [conn# (mg/connect ~store)
-         result# (-> (mg/get-db conn# (:db-name ~store))
-                     ~@body)]
+  `(let [[conn# db#] (connect ~store)
+         result# (-> db# ~@body)]
      (mg/disconnect conn#)
      result#))
 
@@ -133,6 +135,12 @@
 
 (store/privatize-constructors! MongerBlockStore)
 
+(defn- opts->credentials
+  [opts]
+  (when-let [cred (:credentials opts)]
+    (let [[username password] (map cred [:username :password])]
+      (mcred/create username (:db-name opts) password))))
+
 (defn monger-block-store
   "Creates a new Monger block store.
 
@@ -143,7 +151,9 @@
   - `db-name`
   - `credentials`"
   [& {:as opts}]
-  (map->MongerBlockStore opts))
+  (map->MongerBlockStore
+    (cond-> opts
+      (:credentials opts) (assoc :credentials (opts->credentials opts)))))
 
 (defmethod store/initialize "monger"
   [location]
