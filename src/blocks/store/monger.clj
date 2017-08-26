@@ -33,7 +33,8 @@
     (query/empty-query)
     (opts->query opts)
     (opts->limit opts)
-    (hash-map :sort {:id 1})))
+    {:sort {:id 1}
+     :fields [:id :stats]}))
 
 (defn- execute-query
   [db collname m]
@@ -60,6 +61,9 @@
      (mg/disconnect conn#)
      result#))
 
+(defn- cur->seq
+
+
 (defrecord MongerBlockStore
   []
 
@@ -75,7 +79,7 @@
     [this opts]
     (let [[conn db] (connect this)
           stats (->> (execute-query db "blocks" (opts->find-arg opts))
-                     (map (comp block/meta-stats doc->block))
+                     (map #(assoc (:stats %) :id (mhash/decode (:id %))))
                      (doall))]
       (mg/disconnect conn)
       stats))
