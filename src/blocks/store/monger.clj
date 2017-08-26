@@ -62,7 +62,12 @@
      result#))
 
 (defn- cur->seq
-
+  [cur conn]
+  (lazy-seq
+    (if-let [doc (first cur)]
+      (cons (assoc (:stats doc) :id (mhash/decode (:id doc)))
+            (cur->seq (rest cur) conn))
+      (mg/disconnect conn))))
 
 (defrecord MongerBlockStore
   []
@@ -77,12 +82,9 @@
 
   (-list
     [this opts]
-    (let [[conn db] (connect this)
-          stats (->> (execute-query db "blocks" (opts->find-arg opts))
-                     (map #(assoc (:stats %) :id (mhash/decode (:id %))))
-                     (doall))]
-      (mg/disconnect conn)
-      stats))
+    (let [[conn db] (connect this)]
+      (-> (execute-query db "blocks" (opts->find-arg opts))
+          (cur->seq conn))))
 
   (-get
     [this id]
