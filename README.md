@@ -2,6 +2,12 @@
 
 This library provides a [content-addressable](https://en.wikipedia.org/wiki/Content-addressable_storage) [block store](//github.com/greglook/blocks).
 
+## Installation
+
+The library can be installed from Clojars using Leiningen:
+
+[![Clojars Project](http://clojars.org/zcfux/blocks-monger/latest-version.svg)](https://clojars.org/zcfux/blocks-monger)
+
 ## Usage
 
 The `blocks.store.monger` namespace provides the `monger-block-store` constructor. Specify
