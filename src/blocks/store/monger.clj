@@ -13,16 +13,19 @@
             [multihash.core :as mhash]))
 
 (defn- block->base64
+  "Reads all bytes from block and returns a base64 encoded string."
   [block]
   (let [dst (java.io.ByteArrayOutputStream.)]
     (clojure.java.io/copy (block/open block) dst)
     (.encodeToString (java.util.Base64/getEncoder) (.toByteArray dst))))
 
 (defn- base64->bytes
-  [to-decode]
-  (.decode (java.util.Base64/getDecoder) (.getBytes to-decode)))
+  "Decodes the string b64 to bytes."
+  [b64]
+  (.decode (java.util.Base64/getDecoder) (.getBytes b64)))
 
 (defn- doc->block
+  "Converts doc to a block."
   [doc]
   (when doc
     (let [id (mhash/decode (:id doc))]
@@ -30,30 +33,24 @@
           (block/with-stats (merge {:id id} (:stats doc)))))))
 
 (defn- opts->query
-  [opts]
-  (->> (cond-> (select-keys opts [:algorithm])
-         (:after opts) (assoc :id {$gt (:after opts)}))
-       (hash-map :query)))
-
-(defn- opts->limit
-  [opts]
-  (select-keys opts [:limit]))
-
-(defn- opts->find-arg
+  "Converts blocks search options to a monger query."
   [opts]
   (merge
     (query/empty-query)
-    (opts->query opts)
-    (opts->limit opts)
-    {:sort {:id 1}
-     :fields [:id :stats]}))
+    (hash-map :sort {:id 1} :fields [:id :stats])
+    (select-keys opts [:limit])
+    (->> (cond-> (select-keys opts [:algorithm])
+           (:after opts) (assoc :id {$gt (:after opts)}))
+         (hash-map :query))))
 
 (defn- execute-query
+  "Executes the query m and returns a cursor."
   [db collname m]
   (let [coll (.getCollection db collname)]
     (query/exec (merge {:collection coll} m))))
 
 (defn- connect
+  "Connects to the MongoDB server. Returns the connection and database instance."
   [store]
   (let [conn (if-let [cred (:credentials store)]
                (mg/connect-with-credentials (:host store) (:port store) cred)
@@ -62,6 +59,8 @@
     [conn db]))
 
 (defmacro with-db
+  "Connects to the MongoDB server and evaluates body. The related database instance
+  is inserted as second item to the form."
   [store & body]
   `(let [[conn# db#] (connect ~store)
          result# (-> db# ~@body)]
@@ -69,11 +68,14 @@
      result#))
 
 (defn- doc->stats
+  "Returns the stats from a document and adds the id as multihash to the map."
   [doc]
   (when doc
     (assoc (:stats doc) :id (mhash/decode (:id doc)))))
 
 (defn- cur->seq
+  "Converts a MongoDB cursor to a lazy sequence. The connection is closed when the
+  sequence is realized."
   [cur conn]
   (lazy-seq
     (if-let [doc (first cur)]
@@ -94,7 +96,7 @@
   (-list
     [this opts]
     (let [[conn db] (connect this)]
-      (-> (execute-query db "blocks" (opts->find-arg opts))
+      (-> (execute-query db "blocks" (opts->query opts))
           (cur->seq conn))))
 
   (-get
@@ -136,6 +138,7 @@
 (store/privatize-constructors! MongerBlockStore)
 
 (defn- opts->credentials
+  "Creates a new MongoCredential instance from the details found in opts."
   [opts]
   (when-let [cred (:credentials opts)]
     (let [[username password] (map cred [:username :password])]
@@ -152,8 +155,7 @@
   - `credentials`"
   [& {:as opts}]
   (map->MongerBlockStore
-    (cond-> opts
-      (:credentials opts) (assoc :credentials (opts->credentials opts)))))
+    (assoc opts :credentials (opts->credentials opts))))
 
 (defmethod store/initialize "monger"
   [location]
