@@ -56,6 +56,8 @@
                (mg/connect-with-credentials (:host store) (:port store) cred)
                (mg/connect store))
         db (mg/get-db conn (:db-name store))]
+    (mc/ensure-index db "blocks" (array-map :id 1))
+    (mc/ensure-index db "blocks" (array-map :algorithm 1))
     [conn db]))
 
 (defmacro with-db
