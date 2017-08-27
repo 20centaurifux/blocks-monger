@@ -21,8 +21,8 @@
 
 (defn- base64->bytes
   "Decodes the string b64 to bytes."
-  [b64]
-  (.decode (java.util.Base64/getDecoder) (.getBytes b64)))
+  [^String b64]
+  (.decode (^java.util.Base64Decoder java.util.Base64/getDecoder) (.getBytes b64)))
 
 (defn- doc->block
   "Converts doc to a block."
@@ -45,7 +45,7 @@
 
 (defn- execute-query
   "Executes the query m and returns a cursor."
-  [db collname m]
+  [^com.mongodb.DB db collname m]
   (let [coll (.getCollection db collname)]
     (query/exec (merge {:collection coll} m))))
 
