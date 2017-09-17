@@ -10,7 +10,11 @@
               [query :as query]
               [operators :refer :all]
               [credentials :as mcred])
-            [multihash.core :as mhash]))
+            [multihash.core :as mhash]
+            [severin.core :as severin])
+  (:use [severin.pool.monger]))
+
+(def pool (severin/make-pool))
 
 (defn- block->base64
   "Reads all bytes from block and returns a base64 encoded string."
@@ -52,21 +56,18 @@
 (defn- connect
   "Connects to the MongoDB server. Returns the connection and database instance."
   [store]
-  (let [conn (if-let [cred (:credentials store)]
-               (mg/connect-with-credentials (:host store) (:port store) cred)
-               (mg/connect store))
-        db (mg/get-db conn (:db-name store))]
-    (mc/ensure-index db "blocks" (array-map :id 1))
-    (mc/ensure-index db "blocks" (array-map :algorithm 1))
-    [conn db]))
+  (let [r (severin/create! pool (:uri store))]
+    (mc/ensure-index (:db r) "blocks" (array-map :id 1))
+    (mc/ensure-index (:db r) "blocks" (array-map :algorithm 1))
+    r))
 
 (defmacro with-db
   "Connects to the MongoDB server and evaluates body. The related database instance
   is inserted as second item to the form."
   [store & body]
-  `(let [[conn# db#] (connect ~store)
-         result# (-> db# ~@body)]
-     (mg/disconnect conn#)
+  `(let [r# (connect ~store)
+         result# (-> (:db r#) ~@body)]
+     (severin/dispose! pool r#)
      result#))
 
 (defn- doc->stats
@@ -78,12 +79,12 @@
 (defn- cur->seq
   "Converts a MongoDB cursor to a lazy sequence. The connection is closed when the
   sequence is realized."
-  [cur conn]
+  [cur r]
   (lazy-seq
     (if-let [doc (first cur)]
       (cons (doc->stats doc)
-            (cur->seq (rest cur) conn))
-      (mg/disconnect conn))))
+            (cur->seq (rest cur) r))
+      (severin/dispose! pool r))))
 
 (defrecord MongerBlockStore
   []
@@ -97,9 +98,9 @@
 
   (-list
     [this opts]
-    (let [[conn db] (connect this)]
-      (-> (execute-query db "blocks" (opts->query opts))
-          (cur->seq conn))))
+    (let [r (connect this)]
+      (-> (execute-query (:db r) "blocks" (opts->query opts))
+          (cur->seq r))))
 
   (-get
     [this id]
@@ -139,34 +140,15 @@
 
 (store/privatize-constructors! MongerBlockStore)
 
-(defn- opts->credentials
-  "Creates a new MongoCredential instance from the details found in opts."
-  [opts]
-  (when-let [cred (:credentials opts)]
-    (let [[username password] (map cred [:username :password])]
-      (mcred/create username (:db-name opts) password))))
-
 (defn monger-block-store
   "Creates a new Monger block store.
 
   Supported options:
 
-  - `host`
-  - `port`
-  - `db-name`
-  - `credentials`"
+  - `uri`"
   [& {:as opts}]
-  (map->MongerBlockStore
-    (assoc opts :credentials (opts->credentials opts))))
+  (map->MongerBlockStore opts))
 
 (defmethod store/initialize "monger"
-  [location]
-  (let [uri (store/parse-uri location)]
-    (monger-block-store
-     :host (:host uri)
-     :port (:or (:port uri) 27017)
-     :db-name (subs (:path uri) 1)
-     :credentials (when-let
-                    [cred (:user-info uri)]
-                    {:username (:id cred)
-                     :password (:secret cred)}))))
+  [uri]
+  (monger-block-store :uri uri))
