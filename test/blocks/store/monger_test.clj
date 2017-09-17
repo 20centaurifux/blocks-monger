@@ -5,4 +5,4 @@
     [clojure.test :refer :all]))
 
 (deftest ^:integration test-monger-store
-   (tests/check-store! #(monger-block-store :host "localhost" :db-name "monger-store-test")))
+   (tests/check-store! #(monger-block-store :uri "monger://localhost/monger-store-test")))
