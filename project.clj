@@ -1,4 +1,4 @@
-(defproject zcfux/blocks-monger "0.1.0"
+(defproject zcfux/blocks-monger "0.1.1-SNAPSHOT"
   :description "MongoDB backend for blocks."
   :url "https://github.com/20centaurifux/blocks-monger"
   :license {:name "GPL3"
