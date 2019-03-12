@@ -23,12 +23,12 @@ id of the stored block, meta data, algorithm and data (base64 encoded).
 	=> (def store (blocks/->store "monger://localhost/my-storage"))
 
 	; insert block:
-	=> (blocks/put! store (blocks/read! "hello world"))
+	=> @(blocks/put! store (blocks/read! "hello world"))
 	Block[hash:sha2-256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 11 *]
 
 	; listing blocks - data is filtered on server-side:
-	=> (blocks/list store :limit 1 :algorithm :sha2-256 :after "122")
+	=> (blocks/list-seq store :limit 1 :algorithm :sha2-256 :after "122")
 	(Block[hash:sha2-256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9 11 *])
 
 	; deleting all documents:
-	(blocks/erase!! store)
+	(blocks/erase! store)
