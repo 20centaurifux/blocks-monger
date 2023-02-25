@@ -17,7 +17,7 @@
 (def pool (severin/make-pool))
 
 (defn- block->base64
-  "Reads all bytes from block and returns a base64 encoded string."
+  "Reads all bytes from ` block` and returns a base64 encoded string."
   [^Block block]
   (let [dst (java.io.ByteArrayOutputStream.)]
     (block/write! block dst)
@@ -26,7 +26,9 @@
 (defn- base64->bytes
   "Decodes a base64 encoded string to bytes."
   [^String b64]
-  (.decode (^java.util.Base64Decoder java.util.Base64/getDecoder) (.getBytes b64)))
+  (.decode (^java.util.Base64Decoder
+            java.util.Base64/getDecoder)
+           (.getBytes b64)))
 
 (defn- base64->stream
   "Creates an input stream providing a decoded base64 string."
@@ -48,7 +50,8 @@
                         #(base64->stream (:blob doc))))))
 
 (defn- connect
-  "Connects to the MongoDB server. Returns the connection and database instance."
+  "Connects to the MongoDB server.
+  Returns the connection and database instance."
   [store]
   (let [r (severin/create! pool (:uri store))]
     (mc/ensure-index (:db r) "blocks" (array-map :id 1))
@@ -56,8 +59,8 @@
     r))
 
 (defmacro with-db
-  "Connects to the MongoDB server and evaluates body. The related database instance
-  is inserted as second item to the form."
+  "Connects to the MongoDB server and evaluates body.
+  The related database instance is inserted as second item to the form."
   [store & body]
   `(let [r# (connect ~store)
          result# (-> (:db r#) ~@body)]
@@ -65,14 +68,14 @@
      result#))
 
 (defn- execute-query
-  "Executes the query m and returns a cursor."
+  "Executes the query `m` and returns a cursor."
   [^com.mongodb.DB db collname m]
   (let [coll (.getCollection db collname)]
     (query/exec (merge {:collection coll} m))))
 
 (defn- cur->seq
-  "Converts a MongoDB cursor to a lazy sequence. The connection is closed when the
-  sequence is realized."
+  "Converts a MongoDB cursor to a lazy sequence.
+  The connection is closed when the sequence is realized."
   [cur r]
   (lazy-seq
    (if-let [doc (first cur)]
@@ -101,8 +104,9 @@
         (hash-map :query))))
 
 (defn- prepare-block
-  "Prepares a new block for storage based on the given block. This ensures the
-  content is loaded into memory and cleans the block metadata."
+  "Prepares a new block for storage based on the given block.
+  This ensures the content is loaded into memory and cleans the block
+  metadata."
   [^Block block]
   (if (data/byte-content? block)
     (data/create-block
@@ -114,9 +118,7 @@
      (data/read-all (.content block)))))
 
 (defrecord MongerBlockStore []
-
   store/BlockStore
-
   (-list
     [this opts]
     (let [r (connect this)]
@@ -127,13 +129,15 @@
   (-stat
     [this id]
     (store/future'
-     (->> (with-db this (mc/find-one-as-map "blocks" {:id (multihash/hex id)} [:stats]))
+     (->> (with-db this
+            (mc/find-one-as-map "blocks" {:id (multihash/hex id)} [:stats]))
           (doc->stats id))))
 
   (-get
     [this id]
     (store/future'
-     (->> (with-db this (mc/find-one-as-map "blocks" {:id (multihash/hex id)}))
+     (->> (with-db this
+            (mc/find-one-as-map "blocks" {:id (multihash/hex id)}))
           (doc->block id))))
 
   (-put!
@@ -150,7 +154,8 @@
                           "blocks"
                           {:id hex
                            :blob (block->base64 block')
-                           :stats {:stored-at (java.util.Date/from (:stored-at block'))
+                           :stats {:stored-at (java.util.Date/from
+                                               (:stored-at block'))
                                    :size (:size block')}
                            :algorithm (:algorithm id)})
                block')))))))
@@ -164,7 +169,6 @@
            (not= 0)))))
 
   store/ErasableStore
-
   (-erase!
     [this]
     (store/future'
@@ -174,7 +178,6 @@
   "Creates a new Monger block store.
 
   Supported options:
-
   - `uri`"
   [& {:as opts}]
   (map->MongerBlockStore opts))
